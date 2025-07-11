@@ -172,7 +172,7 @@ class TimelineMediaRenamer {
         LoggerUtils.green(`✅ ${this.#l10n(TranslationKeys.RENAMED)}: ${filePath} → ${path.basename(newFilePath)}`);
       } catch (err) {
         this.#skippedFilesLength++;
-        LoggerUtils.red(`⛔ ${this.#l10n(TranslationKeys.ERROR_RENAMING)}: ${filePath}: ${err.message}`);
+        LoggerUtils.red(`⛔ ${this.#l10n(TranslationKeys.ERROR_RENAMING)}: ${filePath}:\n${err.message}`);
       }
     }
 
@@ -206,19 +206,33 @@ class TimelineMediaRenamer {
   }
 
   #formatDate({ key, captureDate }) {
-    let dt = DateTime.fromObject({
-      year: captureDate.year,
-      month: captureDate.month,
-      day: captureDate.day,
-      hour: captureDate.hour,
-      minute: captureDate.minute,
-      second: captureDate.second,
-    }, { zone: captureDate.zoneName });
+    const rawDate = captureDate.rawValue;
+    const offsetTest = /[+-]\d{2}:\d{2}$/;
+
+    let dt = DateTime.fromISO(rawDate, { setZone: true });
+
+    if (!dt.isValid) {
+      dt = DateTime.fromObject({
+        year: captureDate.year,
+        month: captureDate.month,
+        day: captureDate.day,
+        hour: captureDate.hour,
+        minute: captureDate.minute,
+        second: captureDate.second,
+      }, { zone: captureDate.zoneName });
+    }
 
     const isZoned = TimelineMediaRenamerSettings.EXIF_DATES_ZONED.includes(key);
 
-    if (isZoned && captureDate.zoneName === 'UTC') {
-      dt = dt.setZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    if (isZoned) {
+      const hasExplicitOffset =
+        offsetTest.test(rawDate) ||
+        captureDate.tzoffsetMinutes !== 0 ||
+        (captureDate.zoneName && captureDate.zoneName !== 'UTC');
+
+      if (!hasExplicitOffset) {
+        dt = dt.setZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+      }
     }
 
     return dt.toFormat('yyyy-MM-dd_HH-mm-ss');
